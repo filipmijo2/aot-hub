@@ -28,7 +28,7 @@ local C = {
 	ESP = false, Fullbright = false, NoFog = false,
 	AntiAFK = true, AutoChest = false, AutoRetry = false, UpgTarget = 2, AutoUpgrade = false,
 	UIX = -1, UIY = -1, UIVisible = true, Tab = "Combat", Collapsed = false, AutoClaim = false,
-	AutoFarm = false, AutoStart = true, AutoPrestige = false, PrestigeBoost = "Luck", FarmMission = "Shiganshina · Skirmish", FarmMods = true, FarmMaxGrade = 12, ModOddball = false, ModTimeTrial = true, ModGlass = true, SmartGap = 4, StuckLeave = true, AutoBuild = true, SpeedMode = false, Webhook = true, WebhookMin = "Legendary", BossFocus = true, BossEvade = true, AutoSkip = true, AutoQTE = true, PremiumChest = false,
+	AutoFarm = false, AutoStart = true, AutoPrestige = false, PrestigeBoost = "Luck", FarmMission = "Shiganshina · Skirmish", FarmMods = true, FarmMaxGrade = 12, ModOddball = false, ModTimeTrial = true, ModGlass = true, SmartGap = 4, StuckLeave = true, AutoBuild = true, SpeedMode = false, AutoSpears = true, Webhook = true, WebhookMin = "Legendary", BossFocus = true, BossEvade = true, AutoSkip = true, AutoQTE = true, PremiumChest = false,
 	RollDeposit = true, RollStartTier = "Epic", RollStop_Common = false, RollStop_Rare = false, RollStop_Epic = false, RollStop_Legendary = true, RollStop_Mythic = true, RollStop_Secret = true,
 }
 S.C = C
@@ -89,6 +89,7 @@ local function syncCfg()
 	Cfg:SetAttribute("SpeedMode", C.SpeedMode)
 	Cfg:SetAttribute("AutoQTE", C.AutoQTE)
 	Cfg:SetAttribute("AutoSkip", C.AutoSkip)
+	Cfg:SetAttribute("AutoSpears", C.AutoSpears)
 	Cfg:SetAttribute("WebhookMin", C.WebhookMin)
 	Cfg:SetAttribute("PremiumChest", C.PremiumChest)
 	local skip = {}
@@ -157,6 +158,17 @@ local HARD_MODS = { "No Perks", "No Skills", "Nightmare", "Oddball", "Injury Pro
 local ALL_MODS = { "No Perks", "No Skills", "No Memories", "Nightmare", "Oddball", "Injury Prone", "Chronic Injuries", "Fog", "Glass Cannon", "Time Trial", "Boring", "Simple" }
 local function wantedMods()
 	local w = {}
+	-- Thunder-Spear Defend (Forest): nur erleichternde Modifier
+	if cfg:GetAttribute("AutoSpears") then
+		local d = H.Cache.Data
+		local sl = d and d.Slots and d.Slots[d.Current_Slot]
+		local wm = sl and wantedMission and wantedMission(sl)
+		if wm and wm:find("^Forest") then
+			w.Simple = true
+			w.Boring = true
+			return w
+		end
+	end
 	-- Raids: Modifier geben LUCK (halber Wert); Simple/Boring = -20% Luck, Oddball bremst den Boss
 	local fm = cfg:GetAttribute("FarmMission") or ""
 	if workspace:GetAttribute("Type") == "Raids" or fm:find("Titan$") then
@@ -191,6 +203,34 @@ local function syncMods(getCur, remoteMod, fn)
 		if w[m] then n = n + 1 end
 	end
 	return n
+end
+
+local SPEAR_NEED = { Towers = 3, Escort = 1, ["Ice Burst Stones"] = 3, ["Retrieve Missing Supplies"] = 3, ["Defend Missing Supplies"] = 1 }
+function spearClaimPending(sl)
+	if not (sl and sl.Quests and sl.Quests.Spears) then return false end
+	for _, q in pairs(sl.Quests.Spears) do
+		if not q.Rewarded and (q.Current or 0) >= (SPEAR_NEED[q.Tag] or 1) then return true end
+	end
+	return false
+end
+
+-- Ziel-Mission: Thunder-Spear-Quests haben Vorrang, sonst FarmMission
+function wantedMission(sl)
+	local fm = cfg:GetAttribute("FarmMission") or "Shiganshina · Skirmish"
+	if cfg:GetAttribute("AutoSpears") and sl and sl.Quests and sl.Quests.Spears then
+		local need = { Towers = 3, Escort = 1, ["Ice Burst Stones"] = 3, ["Retrieve Missing Supplies"] = 3, ["Defend Missing Supplies"] = 1 }
+		local function open(tag)
+			for _, q in pairs(sl.Quests.Spears) do
+				if q.Tag == tag then return not q.Rewarded and (q.Current or 0) < (need[tag] or 1) end
+			end
+			return false
+		end
+		if open("Towers") then return "Outskirts · Skirmish" end
+		if open("Escort") then return "Outskirts · Escort" end
+		if open("Ice Burst Stones") then return "Utgard · Skirmish" end
+		if open("Retrieve Missing Supplies") or open("Defend Missing Supplies") then return "Forest · Skirmish" end
+	end
+	return fm
 end
 
 local function gradeOf(sl)
@@ -716,6 +756,30 @@ local function doPrestige()
 	return false
 end
 
+-- Thunder-Spear-Quest 1 (Watch Towers, Outskirts Skirmish Aberrant): Fortschritt per Remote melden
+task.spawn(function()
+	task.wait(8)
+	while A.on do
+		task.wait(5)
+		local curMap = isfile("aot_curmap.txt") and readfile("aot_curmap.txt") or ""
+		if cfg:GetAttribute("AutoSpears") and curMap:find("^Outskirts") and workspace:FindFirstChild("Titans") and workspace:GetAttribute("Objective") == "Skirmish"
+			and workspace:GetAttribute("Difficulty") == "Aberrant" then
+			pcall(function()
+				task.synchronize()
+				local d = H.Cache.Data
+				local sl = d and d.Slots and d.Slots[d.Current_Slot]
+				local sp = sl and sl.Quests and sl.Quests.Spears
+				if not sp or not sp[1] or sp[1].Rewarded or (sp[1].Current or 0) >= 3 then return end
+				local before = sp[1].Current or 0
+				local r = GET:InvokeServer("Quests", "Update_Spear_Towers", true)
+				local after = type(r) == "table" and r.Quests and r.Quests.Spears and r.Quests.Spears[1] and r.Quests.Spears[1].Current
+				if type(r) == "table" then H.Cache.Data.Slots[H.Cache.Data.Current_Slot] = r end
+				writefile("aot_spear_log.txt", (isfile("aot_spear_log.txt") and readfile("aot_spear_log.txt") or "") .. os.date("%H:%M:%S") .. " Towers " .. tostring(before) .. " -> " .. tostring(after) .. " (Antwort " .. type(r) .. ", Map " .. tostring(workspace:FindFirstChild("Unclimbable") and "ok") .. ")" .. string.char(10))
+			end)
+		end
+	end
+end)
+
 -- Auto-Farm (Lobby): upgraden -> hoechste Schwierigkeit + harte Modifier -> starten
 local farmRunning = false
 local function startFarm()
@@ -725,6 +789,11 @@ local function startFarm()
 	for _ = 1, 120 do if H.Cache.Data then break end task.wait(0.5) end
 	task.synchronize()
 	while upgRunning do task.wait(0.5) end
+	if cfg:GetAttribute("AutoSpears") or cfg:GetAttribute("AutoClaim") then
+		farmStatus("Claim...")
+		pcall(claimAll)
+		task.wait(0.5)
+	end
 	if cfg:GetAttribute("AutoPrestige") then
 		local d0 = H.Cache.Data
 		local sl0 = d0 and d0.Slots and d0.Slots[d0.Current_Slot]
@@ -749,6 +818,7 @@ local function startFarm()
 	local sl = d and d.Slots and d.Slots[d.Current_Slot]
 	local g = gradeOf(sl)
 	local mission = cfg:GetAttribute("FarmMission") or "Shiganshina · Skirmish"
+	mission = wantedMission(sl) or mission
 	local map, obj = mission:match("^(.-) · (.+)$")
 	map, obj = map or "Shiganshina", obj or "Skirmish"
 	local raid = RAID_OBJ[obj] == true
@@ -761,6 +831,7 @@ local function startFarm()
 	task.wait(0.5)
 	local o = GET:InvokeServer("S_Missions", "Create", { Name = map, Difficulty = diff, Type = raid and "Raids" or "Missions", Objective = obj, Minimum = minimum })
 	if typeof(o) ~= "Instance" then farmStatus("Create abgelehnt (" .. diff .. ")") farmRunning = false return end
+	pcall(function() writefile("aot_curmap.txt", map .. " · " .. obj) end)
 	local nm = syncMods(function() return o:GetAttribute("Modifiers") end, "S_Missions", "Modify")
 	farmStatus("Starte " .. diff .. " mit " .. nm .. " Modifiern...")
 	task.wait(0.5)
@@ -1051,9 +1122,11 @@ task.spawn(function()
 				local upNow = false
 				if farm and type(slot) == "table" then
 					if cfg:GetAttribute("AutoPrestige") and prestigeReady(slot) then upNow = "Prestige" end
-					local fm = cfg:GetAttribute("FarmMission") or ""
+					if cfg:GetAttribute("AutoSpears") and spearClaimPending(slot) then upNow = "Quest-Claim" end
+					local fm = wantedMission(slot)
+					local cur = isfile("aot_curmap.txt") and readfile("aot_curmap.txt") or nil
 					local fobj = fm:match(" · (.+)$")
-					if fobj and workspace:GetAttribute("Objective") and fobj ~= workspace:GetAttribute("Objective") then upNow = "Missionswechsel" end
+					if (cur and cur ~= fm) or (fobj and workspace:GetAttribute("Objective") and fobj ~= workspace:GetAttribute("Objective")) then upNow = "Missionswechsel" end
 				end
 				if not upNow and farm and cfg:GetAttribute("SpeedMode") and type(slot) == "table" and slot.Upgrades then
 					local isRaid = workspace:GetAttribute("Type") == "Raids"
@@ -1223,6 +1296,7 @@ local function targets()
 	if not tf or not hrp then return {} end
 	local list, now = {}, os.clock()
 	local raidMode = workspace:GetAttribute("Type") == "Raids"
+		or (isfile("aot_curmap.txt") and readfile("aot_curmap.txt"):find("^Forest") ~= nil) -- Supplies verteidigen
 	for _, t in ipairs(tf:GetChildren()) do
 		local hb = t:FindFirstChild("Hitboxes")
 		local hit = hb and hb:FindFirstChild("Hit")
@@ -1568,6 +1642,30 @@ conn(Cfg:GetAttributeChangedSignal("DropEvent"):Connect(function()
 		}),
 	})
 end))
+
+-- Thunder-Spear Supplies (Forest): Kisten per Beruehrung aufnehmen und am Kreis abgeben
+task.spawn(function()
+	while S.alive do
+		task.wait(2)
+		if C.AutoSpears then
+			pcall(function()
+				local U = workspace:FindFirstChild("Unclimbable")
+				local circle = U and U:FindFirstChild("Supplies_Circle")
+				local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+				if not circle or not hrp then return end
+				for i = 1, 3 do
+					local box = U:FindFirstChild("ThunderSpear_Supplies" .. i)
+					if box and box:FindFirstChild("Hitbox") then
+						firetouchinterest(hrp, box.Hitbox, 0) task.wait(0.4) firetouchinterest(hrp, box.Hitbox, 1)
+						task.wait(1)
+						firetouchinterest(hrp, circle.Hitbox, 0) task.wait(0.4) firetouchinterest(hrp, circle.Hitbox, 1)
+						task.wait(1.5)
+					end
+				end
+			end)
+		end
+	end
+end)
 
 -- Ressourcen nie leer: Klingen dauerhaft nachladen/auffuellen (auch ohne Kill Aura)
 task.spawn(function()
@@ -1978,6 +2076,7 @@ toggle(F1, "SPEED MODE (max. Runden/h)", "SpeedMode")
 dropdown(F1, "Mission / Raid", "FarmMission", FARM_MISSIONS)
 slider(F1, "Bis Grade", "FarmMaxGrade", 2, 15, 1, function(v) return TAGS[v] or tostring(v) end)
 toggle(F1, "Ohne Klingen+Refills -> Lobby", "StuckLeave")
+toggle(F1, "Thunder-Spear-Quests (Towers per Remote)", "AutoSpears")
 local farmL = info(F1, "Status: -")
 info(F1, "Am Ende: Retry, oder Lobby sobald das Gold fuer die naechste Schwierigkeit reicht.")
 
