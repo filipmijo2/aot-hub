@@ -153,14 +153,14 @@ end
 -- Farm-Helfer (Lobby + Mission)
 local THR = { { "Easy", 0 }, { "Normal", 2 }, { "Hard", 5 }, { "Severe", 9 }, { "Aberrant", 12 } }
 local COSTS = { 500, 1250, 2000, 3000, 5000, 7500, 11000, 17500, 25000, 37500, 50000, 70000, 100000, 135000, 169420 }
-local HARD_MODS = { "No Perks", "No Skills", "No Memories", "Nightmare", "Oddball", "Injury Prone", "Chronic Injuries", "Fog", "Glass Cannon", "Time Trial" }
+local HARD_MODS = { "No Perks", "No Skills", "Nightmare", "Oddball", "Injury Prone", "Chronic Injuries", "Fog", "Glass Cannon", "Time Trial" }
 local ALL_MODS = { "No Perks", "No Skills", "No Memories", "Nightmare", "Oddball", "Injury Prone", "Chronic Injuries", "Fog", "Glass Cannon", "Time Trial", "Boring", "Simple" }
 local function wantedMods()
 	local w = {}
 	-- Raids: Modifier geben LUCK (halber Wert); Simple/Boring = -20% Luck, Oddball bremst den Boss
 	local fm = cfg:GetAttribute("FarmMission") or ""
 	if workspace:GetAttribute("Type") == "Raids" or fm:find("Titan$") then
-		for _, m in ipairs({ "No Perks", "No Skills", "No Memories", "Nightmare", "Injury Prone", "Chronic Injuries", "Fog", "Glass Cannon" }) do w[m] = true end
+		for _, m in ipairs({ "No Perks", "No Skills", "Nightmare", "Injury Prone", "Chronic Injuries", "Fog", "Glass Cannon" }) do w[m] = true end
 		return w
 	end
 	if cfg:GetAttribute("SpeedMode") then
@@ -1430,7 +1430,14 @@ local function autoRoll()
 			break
 		end
 		if left <= 0 then S.rollStatus = S.rollStatus .. " · keine Spins mehr" break end
-		task.wait(3.3)
+		-- kein fester Cooldown: die Retry-Schleife oben pollt alle 0.25s, bis der Server den naechsten Roll annimmt
+		S.rollTimes = S.rollTimes or {}
+		S.rollTimes[#S.rollTimes + 1] = os.clock()
+		if #S.rollTimes >= 2 then
+			S.rollGap = S.rollTimes[#S.rollTimes] - S.rollTimes[#S.rollTimes - 1]
+			S.rollStatus = S.rollStatus .. string.format(" · %.1fs/Roll", S.rollGap)
+		end
+		task.wait(0.1)
 	end
 	S.rolling = false
 end
@@ -2043,7 +2050,7 @@ info(R1, "Ohne Deposit: stoppt bei:")
 for _, rar in ipairs({ "Common", "Rare", "Epic", "Legendary", "Mythic", "Secret" }) do toggle(R1, rar, "RollStop_" .. rar) end
 button(R1, "Auto-Roll Start / Stop", function() autoRoll() end)
 local rollL = info(R1, "Status: -")
-info(R1, "1 Roll / ~3.4s. Jeder Roll ERSETZT die aktuelle Familie.")
+info(R1, "Rollt so schnell wie der Server erlaubt (mit Skip-Roll-Pass evtl. schneller). Jeder Roll ERSETZT die aktuelle Familie.")
 
 -- ===== Visuals =====
 local V1 = section(vL, "ESP")
