@@ -20,7 +20,7 @@ local function conn(c) table.insert(S.conns, c) return c end
 
 ----------------------------------------------------------------- Config
 local C = {
-	KillAura = false, AuraRange = 5000, PerCycle = 3, Interval = 0.6, NapeOnly = true, HitCD = 1.1, SmartAura = true, AutoCannon = true, SpawnBait = false, BaitHeight = 90, CannonMulti = 100,
+	KillAura = false, AuraRange = 5000, PerCycle = 3, Interval = 0.6, NapeOnly = true, HitCD = 1.1, SmartAura = true, AutoCannon = true, SpawnBait = true, BaitHeight = 90, CannonMulti = 100,
 	AutoReload = true, AutoRefill = true,
 	InfGas = false, InfRange = false, InfBlades = false, SpeedPct = 0, ControlPct = 0, RangePct = 0, GasPct = 0, Dashes = 0, GearUncap = false,
 	Family = "Keine",
@@ -1673,7 +1673,7 @@ local lastEvade = 0
 local evParams = RaycastParams.new()
 evParams.FilterType = Enum.RaycastFilterType.Exclude
 conn(RS.Heartbeat:Connect(function()
-	if not C.BossEvade then return end
+	if not C.BossEvade or S.baiting then return end -- Koeder schwebt ausser Reichweite, nicht wegversetzen
 	if os.clock() - lastEvade < 0.4 then return end
 	local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
 	local tf = workspace:FindFirstChild("Titans")
