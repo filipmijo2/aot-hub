@@ -20,7 +20,7 @@ local function conn(c) table.insert(S.conns, c) return c end
 
 ----------------------------------------------------------------- Config
 local C = {
-	KillAura = false, AuraRange = 5000, PerCycle = 3, Interval = 0.6, NapeOnly = true, HitCD = 1.1, SmartAura = true, ExtraPerSlash = 5,
+	KillAura = false, AuraRange = 5000, PerCycle = 3, Interval = 0.6, NapeOnly = true, HitCD = 1.1, SmartAura = true,
 	AutoReload = true, AutoRefill = true,
 	InfGas = false, InfRange = false, InfBlades = false, SpeedPct = 0, ControlPct = 0, RangePct = 0, GasPct = 0, Dashes = 0, GearUncap = false,
 	Family = "Keine",
@@ -1355,7 +1355,7 @@ task.spawn(function()
 						local dt = os.clock() - lastSlash
 						if dt < cd then task.wait(cd - dt) end
 						list = targets()
-						local n = C.SmartAura and (math.min(8, bladesLeft() + 1) + (C.ExtraPerSlash or 0)) or C.PerCycle
+						local n = C.SmartAura and math.min(8, bladesLeft() + 1) or C.PerCycle
 						if #list > 0 then
 							lastSlash = os.clock()
 							DBG("SLASH n=" .. math.min(n, #list) .. " blades=" .. bladesLeft() .. " targets=" .. #list)
@@ -2121,7 +2121,6 @@ local A1 = section(cL, "Kill Aura")
 toggle(A1, "Kill Aura (Nape)  [K]", "KillAura")
 toggle(A1, "Smart (Server-Limit, empfohlen)", "SmartAura")
 slider(A1, "Smart: Slash alle", "SmartGap", 0.9, 8, 0.1, function(v) return v .. " s" end)
-slider(A1, "Extra Treffer/Slash (Carnifex)", "ExtraPerSlash", 0, 10, 1)
 slider(A1, "Reichweite", "AuraRange", 50, 20000, 50, function(v) return v >= 20000 and "Unendlich" or (v .. " st") end)
 info(A1, "Ohne Smart:")
 slider(A1, "Titanen pro Slash", "PerCycle", 1, 30, 1)
