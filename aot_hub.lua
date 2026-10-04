@@ -20,7 +20,7 @@ local function conn(c) table.insert(S.conns, c) return c end
 
 ----------------------------------------------------------------- Config
 local C = {
-	KillAura = false, AuraRange = 5000, PerCycle = 3, Interval = 0.6, NapeOnly = true, HitCD = 1.1, SmartAura = true, AutoCannon = true,
+	KillAura = false, AuraRange = 5000, PerCycle = 3, Interval = 0.6, NapeOnly = true, HitCD = 1.1, SmartAura = true, AutoCannon = true, CannonMulti = 3,
 	AutoReload = true, AutoRefill = true,
 	InfGas = false, InfRange = false, InfBlades = false, SpeedPct = 0, ControlPct = 0, RangePct = 0, GasPct = 0, Dashes = 0, GearUncap = false,
 	Family = "Keine",
@@ -1766,6 +1766,24 @@ task.spawn(function()
 		end
 	end
 end)
+
+-- Kanonen-Umlenkung (Colossal-Raid): Einschlag jeder eigenen Kanonenkugel direkt auf den Boss-Nacken melden
+conn(POST.OnClientEvent:Connect(function(a, b, ball)
+	if not C.AutoCannon or a ~= "Skills" or b ~= "Impact" or typeof(ball) ~= "Instance" or ball.Name ~= "Cannon" then return end
+	local tf = workspace:FindFirstChild("Titans")
+	if not tf then return end
+	for _, t in ipairs(tf:GetChildren()) do
+		if t:GetAttribute("Shifter") then
+			local hit = t:FindFirstChild("Hitboxes") and t.Hitboxes:FindFirstChild("Hit")
+			local np = hit and (hit:FindFirstChild("Nape") or hit:GetChildren()[1])
+			if np then
+				for _ = 1, (C.CannonMulti or 1) do POST:FireServer("S_Skills", "Impact", ball, np.Position) end
+				Cfg:SetAttribute("CannonHits", (Cfg:GetAttribute("CannonHits") or 0) + 1)
+			end
+			return
+		end
+	end
+end))
 
 -- Lobby-Watchdog: Auto-Farm an, aber nach 40s in der Lobby noch keine Mission gestartet -> anstossen
 task.spawn(function()
