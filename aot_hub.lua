@@ -20,7 +20,7 @@ local function conn(c) table.insert(S.conns, c) return c end
 
 ----------------------------------------------------------------- Config
 local C = {
-	KillAura = false, AuraRange = 5000, PerCycle = 3, Interval = 0.6, NapeOnly = true, HitCD = 1.1, SmartAura = true, AutoCannon = true, CannonMulti = 3,
+	KillAura = false, AuraRange = 5000, PerCycle = 3, Interval = 0.6, NapeOnly = true, HitCD = 1.1, SmartAura = true, AutoCannon = true, CannonMulti = 100,
 	AutoReload = true, AutoRefill = true,
 	InfGas = false, InfRange = false, InfBlades = false, SpeedPct = 0, ControlPct = 0, RangePct = 0, GasPct = 0, Dashes = 0, GearUncap = false,
 	Family = "Keine",
@@ -822,7 +822,7 @@ pcall(function()
 		local CS = game:GetService("CollectionService")
 		local seated, angles
 		while A.on do
-			task.wait(0.5)
+			task.wait(0.25)
 			if cfg:GetAttribute("AutoCannon") and workspace:GetAttribute("Type") == "Raids" and colossalTarget() then
 				task.synchronize()
 				local lp = game.Players.LocalPlayer
@@ -839,7 +839,8 @@ pcall(function()
 						end
 					end
 				end
-				if seated and seated:GetAttribute("Firing") == nil and seated:GetAttribute("Cooldown") == nil then
+				-- Server sperrt nur ~1.4s (Shots); das Cooldown-Attribut prueft nur der Client -> ignorieren
+				if seated then
 					local ok, r2 = pcall(function() return GET:InvokeServer("Cannon", "Shoot", angles or { Base = 0, BarrelWood = 0 }) end)
 					if ok and r2 == true then cfg:SetAttribute("CannonShots", (cfg:GetAttribute("CannonShots") or 0) + 1) end
 				end
