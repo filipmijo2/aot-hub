@@ -20,7 +20,7 @@ local function conn(c) table.insert(S.conns, c) return c end
 
 ----------------------------------------------------------------- Config
 local C = {
-	KillAura = false, AuraRange = 5000, PerCycle = 3, Interval = 0.6, NapeOnly = true, HitCD = 1.1, SmartAura = true, AutoCannon = true, CannonMulti = 100,
+	KillAura = false, AuraRange = 5000, PerCycle = 3, Interval = 0.6, NapeOnly = true, HitCD = 1.1, SmartAura = true, AutoCannon = true, SpawnBait = true, BaitHeight = 90, CannonMulti = 100,
 	AutoReload = true, AutoRefill = true,
 	InfGas = false, InfRange = false, InfBlades = false, SpeedPct = 0, ControlPct = 0, RangePct = 0, GasPct = 0, Dashes = 0, GearUncap = false,
 	Family = "Keine",
@@ -1854,6 +1854,57 @@ task.spawn(function()
 	end
 end)
 
+-- Koeder (Colossal-Raid Phase 2): ueber der Titan-Spawn-Zone schweben, damit Titanen dich statt Eren angreifen
+S.spawnPts = {}
+conn(RS.Heartbeat:Connect(function() end))
+task.spawn(function()
+	local tf
+	while S.alive do
+		task.wait(1)
+		local t = workspace:FindFirstChild("Titans")
+		if t ~= tf then
+			tf = t
+			S.spawnPts = {}
+			if tf then
+				conn(tf.ChildAdded:Connect(function(m)
+					task.wait(0.3)
+					if m:GetAttribute("Shifter") then return end
+					local r0 = m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart
+					if r0 then table.insert(S.spawnPts, r0.Position) if #S.spawnPts > 40 then table.remove(S.spawnPts, 1) end end
+				end))
+			end
+		end
+	end
+end)
+local function colossalPct()
+	for _, d in ipairs(LP.PlayerGui:GetDescendants()) do
+		if d:IsA("TextLabel") and d.Name == "Percentage" and d.Visible then return tonumber((d.Text:gsub("%%", ""))) end
+	end
+end
+conn(RS.Heartbeat:Connect(function()
+	if not C.SpawnBait or workspace:GetAttribute("Type") ~= "Raids" or workspace:GetAttribute("Objective") ~= "Colossal Titan" then
+		if S.baiting then S.baiting = false local h = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") if h then h.Anchored = false end end
+		return
+	end
+	local pc = colossalPct()
+	local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+	if not hrp or not pc or pc > 50.05 or workspace:FindFirstChild("Chest_End") then
+		if S.baiting and hrp then hrp.Anchored = false end
+		S.baiting = false
+		return
+	end
+	-- Mitte der zuletzt gesehenen Spawns (Fallback: bekannte Zone Shiganshina)
+	local sx, sz, n = 0, 0, 0
+	for _, v in ipairs(S.spawnPts) do sx, sz, n = sx + v.X, sz + v.Z, n + 1 end
+	local cx, cz = -1800, 450
+	if n >= 3 then cx, cz = sx / n, sz / n end
+	local cannonWeld = hrp:FindFirstChild("Cannon")
+	if cannonWeld then pcall(function() cannonWeld:Destroy() end) end
+	S.baiting = true
+	hrp.Anchored = true
+	hrp.CFrame = CFrame.new(cx, 18 + (C.BaitHeight or 90), cz)
+end))
+
 -- Lobby-Watchdog: Auto-Farm an, aber nach 40s in der Lobby noch keine Mission gestartet -> anstossen
 task.spawn(function()
 	local t0, kicks = os.clock(), 0
@@ -2328,6 +2379,8 @@ local F3 = section(fR, "Raid")
 toggle(F3, "Boss-Fokus (Rest-Treffer auf Boss)", "BossFocus")
 toggle(F3, "Auto-QTE", "AutoQTE")
 toggle(F3, "Colossal: Auto-Kanone (Einschlag auf Colossal)", "AutoCannon")
+toggle(F3, "Colossal: Koeder ueber Titan-Spawn (Phase 2)", "SpawnBait")
+slider(F3, "Koeder-Hoehe", "BaitHeight", 40, 200, 5, function(v) return v .. " st" end)
 toggle(F3, "Cutscenes automatisch skippen", "AutoSkip")
 toggle(F3, "Premium-Truhe (Emperor's Key)", "PremiumChest")
 info(F3, "Phase 1: Titanen am naechsten am Verteidigungsziel zuerst.")
