@@ -804,6 +804,7 @@ pcall(function()
 	Sk.__aotImpact = orig
 	Sk.Impact = function(h, ball, part, t, flag, ...)
 		if cfg:GetAttribute("AutoCannon") and typeof(ball) == "Instance" and (ball.Name == "Cannon" or ball:GetAttribute("Skill") == "Cannon") then
+			do return end
 			local pos = colossalTarget()
 			if pos then
 				task.spawn(function()
@@ -1398,8 +1399,15 @@ local function targets()
 				local od = t:GetAttribute("Distance")
 				if od then d = od end -- naechster am Verteidigungsziel zuerst
 			end
-			if t:GetAttribute("Shifter") then d = -1 lastHit[t] = nil end -- Raid-Boss immer zuerst, ohne Cooldown
-			if C.AuraRange >= 20000 or d <= C.AuraRange then list[#list + 1] = { t = t, nape = nape, d = d } end
+			local immune = false
+			if t:GetAttribute("Type") == "Colossal" then
+				local ob = workspace:FindFirstChild("Unclimbable") and workspace.Unclimbable:FindFirstChild("Objective")
+				local de = ob and ob:FindFirstChild("Defend_Eren_2")
+				immune = de ~= nil and (de:GetAttribute("Phase") or 1) == 1
+			end
+			if immune then d = math.huge end -- Phase 1: Colossal nur per Kanone verwundbar
+			if t:GetAttribute("Shifter") and not immune then d = -1 lastHit[t] = nil end -- Raid-Boss immer zuerst, ohne Cooldown
+			if d ~= math.huge and (C.AuraRange >= 20000 or d <= C.AuraRange) then list[#list + 1] = { t = t, nape = nape, d = d } end
 		end
 	end
 	table.sort(list, function(a, b) return a.d < b.d end)
