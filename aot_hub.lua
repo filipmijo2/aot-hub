@@ -20,7 +20,7 @@ local function conn(c) table.insert(S.conns, c) return c end
 
 ----------------------------------------------------------------- Config
 local C = {
-	KillAura = false, AuraRange = 5000, PerCycle = 3, Interval = 0.6, NapeOnly = true, HitCD = 1.1, SmartAura = true, AutoCannon = true, SpawnBait = false, BaitHeight = 90, CannonMulti = 100,
+	KillAura = false, AuraRange = 5000, PerCycle = 3, Interval = 0.6, NapeOnly = true, HitCD = 1.1, SmartAura = true, AutoCannon = true, SpawnBait = false, BaitHeight = 90, EvadeRange = 220, CannonMulti = 100,
 	AutoReload = true, AutoRefill = true,
 	InfGas = false, InfRange = false, InfBlades = false, SpeedPct = 0, ControlPct = 0, RangePct = 0, GasPct = 0, Dashes = 0, GearUncap = false,
 	Family = "Keine",
@@ -1463,7 +1463,7 @@ task.spawn(function()
 									local e = list[i]
 									local root = e.t:FindFirstChild("HumanoidRootPart") or e.t.PrimaryPart
 									local toGoal = e.t:GetAttribute("Distance") -- Abstand zum Verteidigungsziel (Eren)
-									if (toGoal and toGoal < 500) or (hrp and root and (root.Position - hrp.Position).Magnitude < 400) then
+									if (toGoal and toGoal < 500) or (hrp and root and (root.Position - hrp.Position).Magnitude < 800) then
 										lastHit[e.t] = os.clock()
 										POST:FireServer("Hitboxes", "Register", e.nape, 200 + math.random() * 40, 0.25 + math.random() * 0.4)
 										used = used + 1
@@ -1684,7 +1684,7 @@ conn(RS.Heartbeat:Connect(function()
 		local root = t:FindFirstChild("HumanoidRootPart") or t.PrimaryPart
 		if root then
 			local d = Vector3.new(hrp.Position.X - root.Position.X, 0, hrp.Position.Z - root.Position.Z).Magnitude
-			if d < (t:GetAttribute("Shifter") and 450 or 120) then broot = root break end
+			if d < (t:GetAttribute("Shifter") and 450 or (C.EvadeRange or 220)) then broot = root break end
 		end
 	end
 	if not broot then return end
