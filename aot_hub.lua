@@ -20,7 +20,7 @@ local function conn(c) table.insert(S.conns, c) return c end
 
 ----------------------------------------------------------------- Config
 local C = {
-	KillAura = false, AuraRange = 5000, PerCycle = 3, Interval = 0.6, NapeOnly = true, HitCD = 1.1, SmartAura = true,
+	KillAura = false, AuraRange = 5000, PerCycle = 3, Interval = 0.6, NapeOnly = true, HitCD = 1.1, SmartAura = true, ExtraPerSlash = 5,
 	AutoReload = true, AutoRefill = true,
 	InfGas = false, InfRange = false, InfBlades = false, SpeedPct = 0, ControlPct = 0, RangePct = 0, GasPct = 0, Dashes = 0, GearUncap = false,
 	Family = "Keine",
@@ -29,7 +29,7 @@ local C = {
 	AntiAFK = true, AutoChest = false, AutoRetry = false, UpgTarget = 2, AutoUpgrade = false,
 	UIX = -1, UIY = -1, UIVisible = true, Tab = "Combat", Collapsed = false, AutoClaim = false,
 	AutoFarm = false, AutoStart = true, AutoPrestige = false, PrestigeBoost = "Luck", FarmMission = "Shiganshina · Skirmish", FarmMods = true, FarmMaxGrade = 12, ModOddball = false, ModTimeTrial = true, ModGlass = true, SmartGap = 4, StuckLeave = true, AutoBuild = true, SpeedMode = false, AutoSpears = true, Webhook = true, WebhookMin = "Legendary", BossFocus = true, BossEvade = true, AutoSkip = true, AutoQTE = true, PremiumChest = false,
-	RollDeposit = true, RollStartTier = "Epic", RollStop_Common = false, RollStop_Rare = false, RollStop_Epic = false, RollStop_Legendary = true, RollStop_Mythic = true, RollStop_Secret = true,
+	RollDeposit = true, RollGap = 0.55, RollStartTier = "Epic", RollStop_Common = false, RollStop_Rare = false, RollStop_Epic = false, RollStop_Legendary = true, RollStop_Mythic = true, RollStop_Secret = true,
 }
 S.C = C
 local HS = game:GetService("HttpService")
@@ -789,6 +789,16 @@ local function startFarm()
 	for _ = 1, 120 do if H.Cache.Data then break end task.wait(0.5) end
 	task.synchronize()
 	while upgRunning do task.wait(0.5) end
+	-- Waffe immer auf Klingen (Kill-Aura braucht Klingen)
+	pcall(function()
+		local d = H.Cache.Data
+		local sl = d and d.Slots and d.Slots[d.Current_Slot]
+		if sl and sl.Weapon ~= "Blades" then
+			task.synchronize()
+			local nd = GET:InvokeServer("S_Equipment", "Weapon", "Blades")
+			if type(nd) == "table" then H.Cache.Data = nd end
+		end
+	end)
 	if cfg:GetAttribute("AutoSpears") or cfg:GetAttribute("AutoClaim") then
 		farmStatus("Claim...")
 		pcall(claimAll)
@@ -1345,7 +1355,7 @@ task.spawn(function()
 						local dt = os.clock() - lastSlash
 						if dt < cd then task.wait(cd - dt) end
 						list = targets()
-						local n = C.SmartAura and math.min(8, bladesLeft() + 1) or C.PerCycle
+						local n = C.SmartAura and (math.min(8, bladesLeft() + 1) + (C.ExtraPerSlash or 0)) or C.PerCycle
 						if #list > 0 then
 							lastSlash = os.clock()
 							DBG("SLASH n=" .. math.min(n, #list) .. " blades=" .. bladesLeft() .. " targets=" .. #list)
@@ -1456,11 +1466,14 @@ local function autoRoll()
 		local ok, spins, extra, fam, pity
 		-- Server-Cooldown ~3.4s zwischen Rolls: bis zu 6s alle 0.25s erneut versuchen
 		local t0 = os.clock()
+		local back = 0.6
 		repeat
 			ok, spins, extra, fam, pity = pcall(function() return GET:InvokeServer("Family", "Roll") end)
 			if ok and fam ~= nil then break end
-			task.wait(0.25)
-		until os.clock() - t0 > 6 or not S.rolling
+			-- abgelehnt: ruhig zurueckhalten statt spammen (Spam verlaengert die Sperre)
+			task.wait(back)
+			back = math.min(back + 0.4, 2)
+		until os.clock() - t0 > 8 or not S.rolling
 		if not ok or fam == nil then
 			S.rollStatus = n == 0 and "Roll abgelehnt (keine Spins / falscher Screen?)" or ("Gestoppt nach " .. n .. " Rolls (Server lehnt ab)")
 			break
@@ -1511,9 +1524,18 @@ local function autoRoll()
 			S.rollGap = S.rollTimes[#S.rollTimes] - S.rollTimes[#S.rollTimes - 1]
 			S.rollStatus = S.rollStatus .. string.format(" · %.1fs/Roll", S.rollGap)
 		end
-		task.wait(0.1)
+		task.wait(C.RollGap or 0.55)
 	end
 	S.rolling = false
+end
+S.autoRoll = autoRoll
+
+-- Lobby-Teleport, der auch einen haengenden Teleport ("previous teleport is in processing") aufloest
+function lobbyTP()
+	local TS = game:GetService("TeleportService")
+	pcall(function() TS:TeleportCancel() end)
+	task.wait(1)
+	pcall(function() TS:Teleport(14916516914, LP) end)
 end
 
 -- Teleport-Watchdog: haengt ein Retry/Teleport > 60s -> Client-Teleport in die Lobby (Auto-Farm laeuft dort weiter)
@@ -1524,7 +1546,7 @@ task.spawn(function()
 			since = since or os.clock()
 			if os.clock() - since > 60 then
 				Cfg:SetAttribute("FarmStatus", "Teleport haengt -> Lobby")
-				pcall(function() game:GetService("TeleportService"):Teleport(14916516914, LP) end)
+				lobbyTP()
 				since = os.clock()
 			end
 		elseif C.AutoStart and LP:GetAttribute("Teleporting") == true and game.PlaceId == 14916516914 then
@@ -1663,6 +1685,56 @@ task.spawn(function()
 					end
 				end
 			end)
+		end
+	end
+end)
+
+-- Lobby-Watchdog: Auto-Farm an, aber nach 40s in der Lobby noch keine Mission gestartet -> anstossen
+task.spawn(function()
+	local t0, kicks = os.clock(), 0
+	while S.alive do
+		task.wait(5)
+		if C.AutoFarm and game.PlaceId == 14916516914 and not workspace:FindFirstChild("Titans") then
+			local st = tostring(Cfg:GetAttribute("FarmStatus") or "")
+			if os.clock() - t0 > 40 + kicks * 40 and not st:find("Starte") then
+				kicks = kicks + 1
+				Cfg:SetAttribute("FarmStatus", "Lobby-Watchdog: starte Farm (" .. kicks .. ")")
+				Cfg:SetAttribute("FarmReq", os.clock())
+			end
+		end
+	end
+end)
+
+-- Rundenende-Watchdog: haengt die Runde fertig rum (Seconds steht still, keine Titanen), Retry erneut
+-- senden; nach 3 Fehlversuchen per TeleportService in die Lobby (Auto-Farm laeuft dort weiter)
+task.spawn(function()
+	local lastSec, since, tries = nil, nil, 0
+	while S.alive do
+		task.wait(5)
+		Cfg:SetAttribute("WDBeat", os.time())
+		if C.AutoFarm and workspace:FindFirstChild("Titans") then
+			local sec = workspace:GetAttribute("Seconds")
+			local idle = workspace:GetAttribute("Rewarded") == true or #workspace.Titans:GetChildren() == 0
+			if sec ~= nil and sec == lastSec and idle then
+				since = since or os.clock()
+				if os.clock() - since > 45 then
+					tries = tries + 1
+					since = os.clock()
+					if tries <= 3 then
+						Cfg:SetAttribute("FarmStatus", "Watchdog: Retry erneut (" .. tries .. "/3)")
+						pcall(function() GET:InvokeServer("Functions", "Retry", "Add") end)
+					else
+						Cfg:SetAttribute("FarmStatus", "Watchdog: Retry klemmt -> Lobby")
+						lobbyTP()
+						tries = 0
+					end
+				end
+			else
+				since, tries = nil, 0
+			end
+			lastSec = sec
+		else
+			lastSec, since, tries = nil, nil, 0
 		end
 	end
 end)
@@ -2049,6 +2121,7 @@ local A1 = section(cL, "Kill Aura")
 toggle(A1, "Kill Aura (Nape)  [K]", "KillAura")
 toggle(A1, "Smart (Server-Limit, empfohlen)", "SmartAura")
 slider(A1, "Smart: Slash alle", "SmartGap", 0.9, 8, 0.1, function(v) return v .. " s" end)
+slider(A1, "Extra Treffer/Slash (Carnifex)", "ExtraPerSlash", 0, 10, 1)
 slider(A1, "Reichweite", "AuraRange", 50, 20000, 50, function(v) return v >= 20000 and "Unendlich" or (v .. " st") end)
 info(A1, "Ohne Smart:")
 slider(A1, "Titanen pro Slash", "PerCycle", 1, 30, 1)
