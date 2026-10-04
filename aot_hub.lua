@@ -823,7 +823,7 @@ pcall(function()
 		local seated, angles
 		while A.on do
 			task.wait(0.25)
-			if cfg:GetAttribute("AutoCannon") and workspace:GetAttribute("Type") == "Raids" and colossalTarget() then
+			if cfg:GetAttribute("AutoCannonActor") and workspace:GetAttribute("Type") == "Raids" and colossalTarget() then
 				task.synchronize()
 				local lp = game.Players.LocalPlayer
 				if not (seated and seated.Parent and seated:GetAttribute("Player") == lp.Name) then
@@ -1785,6 +1785,35 @@ conn(POST.OnClientEvent:Connect(function(a, b, ball)
 		end
 	end
 end))
+
+-- Kanonier (Main-VM): eigene Kanone besetzen, dauernd feuern (Server nimmt alle ~1,4s an)
+task.spawn(function()
+	local CS = game:GetService("CollectionService")
+	local ang
+	while S.alive do
+		task.wait(0.25)
+		if C.AutoCannon and workspace:GetAttribute("Type") == "Raids" and workspace:FindFirstChild("Titans") then
+			local boss
+			for _, t in ipairs(workspace.Titans:GetChildren()) do if t:GetAttribute("Shifter") then boss = t break end end
+			if boss then
+				local mine
+				for _, c in ipairs(CS:GetTagged("Cannon")) do if c:GetAttribute("Player") == LP.Name then mine = c break end end
+				if not mine then
+					for _, c in ipairs(CS:GetTagged("Cannon")) do
+						if c:GetAttribute("Player") == nil then
+							local ok, a = pcall(function() return GET:InvokeServer("Cannon", "State", c, true, nil) end)
+							if ok and type(a) == "table" then mine, ang = c, a break end
+						end
+					end
+				end
+				if mine then
+					local ok, r = pcall(function() return GET:InvokeServer("Cannon", "Shoot", ang or { Base = 0, BarrelWood = 0 }) end)
+					if ok and r == true then Cfg:SetAttribute("CannonShots", (Cfg:GetAttribute("CannonShots") or 0) + 1) end
+				end
+			end
+		end
+	end
+end)
 
 -- Lobby-Watchdog: Auto-Farm an, aber nach 40s in der Lobby noch keine Mission gestartet -> anstossen
 task.spawn(function()
