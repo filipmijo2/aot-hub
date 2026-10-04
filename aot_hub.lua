@@ -1462,7 +1462,8 @@ task.spawn(function()
 									if used >= n then break end
 									local e = list[i]
 									local root = e.t:FindFirstChild("HumanoidRootPart") or e.t.PrimaryPart
-									if hrp and root and (root.Position - hrp.Position).Magnitude < 400 then
+									local toGoal = e.t:GetAttribute("Distance") -- Abstand zum Verteidigungsziel (Eren)
+									if (toGoal and toGoal < 500) or (hrp and root and (root.Position - hrp.Position).Magnitude < 400) then
 										lastHit[e.t] = os.clock()
 										POST:FireServer("Hitboxes", "Register", e.nape, 200 + math.random() * 40, 0.25 + math.random() * 0.4)
 										used = used + 1
@@ -1824,6 +1825,31 @@ task.spawn(function()
 					if ok and r == true then Cfg:SetAttribute("CannonShots", (Cfg:GetAttribute("CannonShots") or 0) + 1) end
 				end
 			end
+		end
+	end
+end)
+
+-- Raid-Zwischensequenz haengt ("Waiting for players to load") -> Lade-Meldung selbst schicken
+task.spawn(function()
+	local since
+	while S.alive do
+		task.wait(1)
+		local waiting = false
+		if workspace:GetAttribute("Type") == "Raids" then
+			for _, d in ipairs(LP.PlayerGui:GetDescendants()) do
+				if d:IsA("TextLabel") and d.Visible and d.Text:find("Waiting for players to load") then waiting = true break end
+			end
+		end
+		if waiting then
+			since = since or os.clock()
+			if os.clock() - since > 3 then
+				pcall(function() POST:FireServer("Functions", "Loaded", "Add") end)
+				pcall(function() GET:InvokeServer("Functions", "Loaded", "Add") end)
+				Cfg:SetAttribute("FarmStatus", "Raid: Lade-Meldung gesendet")
+				since = os.clock() + 5
+			end
+		else
+			since = nil
 		end
 	end
 end)
