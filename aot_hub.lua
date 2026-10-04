@@ -20,7 +20,7 @@ local function conn(c) table.insert(S.conns, c) return c end
 
 ----------------------------------------------------------------- Config
 local C = {
-	KillAura = false, AuraRange = 5000, PerCycle = 3, Interval = 0.6, NapeOnly = true, HitCD = 1.1, SmartAura = true,
+	KillAura = false, AuraRange = 5000, PerCycle = 3, Interval = 0.6, NapeOnly = true, HitCD = 1.1, SmartAura = true, AutoCannon = true,
 	AutoReload = true, AutoRefill = true,
 	InfGas = false, InfRange = false, InfBlades = false, SpeedPct = 0, ControlPct = 0, RangePct = 0, GasPct = 0, Dashes = 0, GearUncap = false,
 	Family = "Keine",
@@ -89,6 +89,7 @@ local function syncCfg()
 	Cfg:SetAttribute("SpeedMode", C.SpeedMode)
 	Cfg:SetAttribute("AutoQTE", C.AutoQTE)
 	Cfg:SetAttribute("AutoSkip", C.AutoSkip)
+	Cfg:SetAttribute("AutoCannon", C.AutoCannon)
 	Cfg:SetAttribute("AutoSpears", C.AutoSpears)
 	Cfg:SetAttribute("WebhookMin", C.WebhookMin)
 	Cfg:SetAttribute("PremiumChest", C.PremiumChest)
@@ -778,6 +779,73 @@ task.spawn(function()
 			end)
 		end
 	end
+end)
+
+-- Auto-Kanone: Kanone besetzen, feuern; Einschlag (client-gemeldet) direkt auf den Colossal legen
+pcall(function()
+	local Sk = M.Skills
+	if not Sk or not Sk.Impact or Sk.__aotImpact then return end
+	local POSTr = game:GetService("ReplicatedStorage").Assets.Remotes.POST
+	local function colossalTarget()
+		local tf = workspace:FindFirstChild("Titans")
+		if not tf then return end
+		local best
+		for _, t in ipairs(tf:GetChildren()) do
+			local ty = tostring(t:GetAttribute("Type") or "")
+			if t.Name:find("Colossal") or ty:find("Colossal") then best = t break end
+			if t:GetAttribute("Shifter") then best = best or t end
+		end
+		if not best then return end
+		local hit = best:FindFirstChild("Hitboxes") and best.Hitboxes:FindFirstChild("Hit")
+		local part = (hit and (hit:FindFirstChild("Nape") or hit:GetChildren()[1])) or best:FindFirstChild("HumanoidRootPart") or best.PrimaryPart
+		return part and part.Position, best
+	end
+	local orig = Sk.Impact
+	Sk.__aotImpact = orig
+	Sk.Impact = function(h, ball, part, t, flag, ...)
+		if cfg:GetAttribute("AutoCannon") and typeof(ball) == "Instance" and ball:GetAttribute("Skill") == "Cannon" then
+			local pos = colossalTarget()
+			if pos then
+				task.spawn(function()
+					task.wait(0.05)
+					task.synchronize()
+					POSTr:FireServer("S_Skills", "Impact", ball, pos)
+					cfg:SetAttribute("CannonHits", (cfg:GetAttribute("CannonHits") or 0) + 1)
+				end)
+				return
+			end
+		end
+		return orig(h, ball, part, t, flag, ...)
+	end
+	-- Besetzen + Feuern
+	task.spawn(function()
+		local CS = game:GetService("CollectionService")
+		local seated, angles
+		while A.on do
+			task.wait(0.5)
+			if cfg:GetAttribute("AutoCannon") and workspace:GetAttribute("Type") == "Raids" and colossalTarget() then
+				task.synchronize()
+				local lp = game.Players.LocalPlayer
+				if not (seated and seated.Parent and seated:GetAttribute("Player") == lp.Name) then
+					seated = nil
+					for _, c in ipairs(CS:GetTagged("Cannon")) do
+						if c:GetAttribute("Player") == nil or c:GetAttribute("Player") == lp.Name then
+							local ok, a = pcall(function() return GET:InvokeServer("Cannon", "State", c, true, nil) end)
+							if ok and type(a) == "table" then
+								seated, angles = c, a
+								M.Cannon.Info = M.Cannon.Info or nil
+								break
+							end
+						end
+					end
+				end
+				if seated and seated:GetAttribute("Firing") == nil and seated:GetAttribute("Cooldown") == nil then
+					local ok, r2 = pcall(function() return GET:InvokeServer("Cannon", "Shoot", angles or { Base = 0, BarrelWood = 0 }) end)
+					if ok and r2 == true then cfg:SetAttribute("CannonShots", (cfg:GetAttribute("CannonShots") or 0) + 1) end
+				end
+			end
+		end
+	end)
 end)
 
 -- Auto-Farm (Lobby): upgraden -> hoechste Schwierigkeit + harte Modifier -> starten
@@ -2172,6 +2240,7 @@ info(F2, "Speed: Simple, Boring, Time Trial, Fog, Injury Prone, Chronic Injuries
 local F3 = section(fR, "Raid")
 toggle(F3, "Boss-Fokus (Rest-Treffer auf Boss)", "BossFocus")
 toggle(F3, "Auto-QTE", "AutoQTE")
+toggle(F3, "Colossal: Auto-Kanone (Einschlag auf Colossal)", "AutoCannon")
 toggle(F3, "Cutscenes automatisch skippen", "AutoSkip")
 toggle(F3, "Premium-Truhe (Emperor's Key)", "PremiumChest")
 info(F3, "Phase 1: Titanen am naechsten am Verteidigungsziel zuerst.")
