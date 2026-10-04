@@ -1403,7 +1403,12 @@ local function targets()
 			if t:GetAttribute("Type") == "Colossal" then
 				local ob = workspace:FindFirstChild("Unclimbable") and workspace.Unclimbable:FindFirstChild("Objective")
 				local de = ob and ob:FindFirstChild("Defend_Eren_2")
-				immune = de ~= nil and (de:GetAttribute("Phase") or 1) == 1
+				-- Phase 1 endet bei 50% Leben (Phase-Attribut wechselt nicht zuverlaessig)
+				local pc
+				for _, g in ipairs(LP.PlayerGui:GetDescendants()) do
+					if g:IsA("TextLabel") and g.Name == "Percentage" and g.Visible then pc = tonumber((g.Text:gsub("%%", ""))) break end
+				end
+				immune = de ~= nil and (de:GetAttribute("Phase") or 1) == 1 and (pc == nil or pc > 50.05)
 			end
 			if immune then d = math.huge end -- Phase 1: Colossal nur per Kanone verwundbar
 			if t:GetAttribute("Shifter") and not immune then d = -1 lastHit[t] = nil end -- Raid-Boss immer zuerst, ohne Cooldown
