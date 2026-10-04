@@ -20,7 +20,7 @@ local function conn(c) table.insert(S.conns, c) return c end
 
 ----------------------------------------------------------------- Config
 local C = {
-	KillAura = false, AuraRange = 5000, PerCycle = 3, Interval = 0.6, NapeOnly = true, HitCD = 1.1, SmartAura = true, AutoCannon = true, SpawnBait = false, BaitHeight = 90, EvadeRange = 220, SelfDefRange = 120, CannonMulti = 100,
+	KillAura = false, AuraRange = 5000, PerCycle = 3, Interval = 0.6, NapeOnly = true, HitCD = 1.1, SmartAura = true, AutoCannon = true, SpawnBait = false, BaitHeight = 90, EvadeRange = 220, SelfDefRange = 120, CoopRole = "Solo", CannonMulti = 100,
 	AutoReload = true, AutoRefill = true,
 	InfGas = false, InfRange = false, InfBlades = false, SpeedPct = 0, ControlPct = 0, RangePct = 0, GasPct = 0, Dashes = 0, GearUncap = false,
 	Family = "Keine",
@@ -1454,7 +1454,28 @@ task.spawn(function()
 							POST:FireServer("Attacks", "Slash", true)
 							task.wait(0.03)
 							local bossE = C.BossFocus and list[1] and list[1].t:GetAttribute("Shifter") and list[1]
-							if bossE then
+							local role = C.CoopRole or "Solo"
+							if bossE and role == "Player 2" then
+								-- Coop P2: nur Boss
+								for _ = 1, n do
+									POST:FireServer("Hitboxes", "Register", bossE.nape, 200 + math.random() * 40, 0.25 + math.random() * 0.4)
+								end
+							elseif bossE and role == "Player 1" then
+								-- Coop P1 (Verteidiger): kleine Titanen naechst an Eren zuerst, Rest auf den Boss
+								local smalls = {}
+								for i = 2, #list do smalls[#smalls + 1] = list[i] end
+								table.sort(smalls, function(x, y) return (x.t:GetAttribute("Distance") or x.d) < (y.t:GetAttribute("Distance") or y.d) end)
+								local used = 0
+								for _, e in ipairs(smalls) do
+									if used >= n then break end
+									lastHit[e.t] = os.clock()
+									POST:FireServer("Hitboxes", "Register", e.nape, 200 + math.random() * 40, 0.25 + math.random() * 0.4)
+									used = used + 1
+								end
+								for _ = used + 1, n do
+									POST:FireServer("Hitboxes", "Register", bossE.nape, 200 + math.random() * 40, 0.25 + math.random() * 0.4)
+								end
+							elseif bossE then
 								-- erst normale Titanen in meiner Naehe (Gefahr), Rest der Treffer auf den Boss-Nacken
 								local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
 								local used = 0
@@ -1813,7 +1834,15 @@ task.spawn(function()
 				local mine
 				for _, c in ipairs(CS:GetTagged("Cannon")) do if c:GetAttribute("Player") == LP.Name then mine = c break end end
 				if not mine then
-					for _, c in ipairs(CS:GetTagged("Cannon")) do
+					local cands = {}
+					for _, c in ipairs(CS:GetTagged("Cannon")) do if c:GetAttribute("Player") == nil then cands[#cands + 1] = c end end
+					table.sort(cands, function(x, y)
+						local xs, ys = x:GetAttribute("Spawn") == LP.Name, y:GetAttribute("Spawn") == LP.Name
+						if xs ~= ys then return xs end
+						if C.CoopRole == "Player 2" then return x:GetFullName() > y:GetFullName() end
+						return x:GetFullName() < y:GetFullName()
+					end)
+					for _, c in ipairs(cands) do
 						if c:GetAttribute("Player") == nil then
 							local ok, a = pcall(function() return GET:InvokeServer("Cannon", "State", c, true, nil) end)
 							if ok and type(a) == "table" then mine, ang = c, a break end
@@ -2378,6 +2407,8 @@ info(F2, "Speed: Simple, Boring, Time Trial, Fog, Injury Prone, Chronic Injuries
 local F3 = section(fR, "Raid")
 toggle(F3, "Boss-Fokus (Rest-Treffer auf Boss)", "BossFocus")
 toggle(F3, "Auto-QTE", "AutoQTE")
+dropdown(F3, "Coop-Rolle (Raid)", "CoopRole", { "Solo", "Player 1", "Player 2" })
+info(F3, "P1: Kanone vorne, Phase 2 Verteidiger (Titanen bei Eren, Rest Boss). P2: Kanone hinten, Phase 2 nur Boss.")
 toggle(F3, "Colossal: Auto-Kanone (Einschlag auf Colossal)", "AutoCannon")
 toggle(F3, "Colossal: Koeder ueber Titan-Spawn (Phase 2)", "SpawnBait")
 slider(F3, "Koeder-Hoehe", "BaitHeight", 40, 200, 5, function(v) return v .. " st" end)
