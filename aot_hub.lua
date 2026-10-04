@@ -803,7 +803,7 @@ pcall(function()
 	local orig = Sk.Impact
 	Sk.__aotImpact = orig
 	Sk.Impact = function(h, ball, part, t, flag, ...)
-		if cfg:GetAttribute("AutoCannon") and typeof(ball) == "Instance" and ball:GetAttribute("Skill") == "Cannon" then
+		if cfg:GetAttribute("AutoCannon") and typeof(ball) == "Instance" and (ball.Name == "Cannon" or ball:GetAttribute("Skill") == "Cannon") then
 			local pos = colossalTarget()
 			if pos then
 				task.spawn(function()
