@@ -954,6 +954,7 @@ end)
 
 -- Missionsende: Free-Chest + Retry
 local endDone = false
+local endAt, endResends = nil, 0
 S_lastChest = nil
 task.spawn(function()
 	while A.on do
@@ -1190,9 +1191,18 @@ task.spawn(function()
 				elseif cfg:GetAttribute("AutoRetry") then
 					pcall(function() GET:InvokeServer("Functions", "Retry", "Add") end)
 				end
+				endAt, endResends = os.clock(), 0
+			elseif (cfg:GetAttribute("AutoFarm") or cfg:GetAttribute("AutoRetry")) and endAt and os.clock() - endAt > 10 and endResends < 6
+				and not (game.Players.LocalPlayer:GetAttribute("Teleporting") == true and (workspace:GetAttribute("Starting") or 0) > 0) then
+				-- Retry kam nicht an (Runde steht weiter auf Ende) -> erneut senden
+				endResends = endResends + 1
+				endAt = os.clock()
+				farmStatus("Retry erneut (" .. endResends .. ")")
+				pcall(function() GET:InvokeServer("Functions", "Retry", "Add") end)
 			end
 		else
 			endDone = false
+			endAt = nil
 		end
 	end
 end)
