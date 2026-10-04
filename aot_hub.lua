@@ -1939,7 +1939,7 @@ task.spawn(function()
 	local t0, kicks = os.clock(), 0
 	while S.alive do
 		task.wait(5)
-		if C.AutoFarm and game.PlaceId == 14916516914 and not workspace:FindFirstChild("Titans") then
+		if C.AutoStart and game.PlaceId == 14916516914 and not workspace:FindFirstChild("Titans") then
 			local st = tostring(Cfg:GetAttribute("FarmStatus") or "")
 			if os.clock() - t0 > 40 + kicks * 40 and not st:find("Starte") then
 				kicks = kicks + 1
